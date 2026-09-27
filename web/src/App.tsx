@@ -11,16 +11,19 @@ import {
   useCustomSubsystem,
   connectSerial,
 } from "@cormoran/zmk-studio-react-hook";
-import { Request, Response } from "./proto/your-name/template/template";
+import {
+  Request,
+  Response,
+} from "./proto/cormoran/feature-typing-heatmap/feature_typing_heatmap";
 
-export const SUBSYSTEM_IDENTIFIER = "your_name__template";
+export const SUBSYSTEM_IDENTIFIER = "cormoran_typing_heatmap";
 
 // Template placeholder: `scripts/init_module.py` rewrites this literal to
 // `{owner}/{repo}`. Never write the full
 // `...-with-custom-studio-rpc` repo name in a URL built from this constant --
 // the replacement targets this exact string first, which would otherwise
 // leave the owner unreplaced.
-export const GITHUB_REPO = "cormoran/zmk-module-template";
+export const GITHUB_REPO = "cormoran/zmk-feature-typing-heatmap";
 
 // Unlike GITHUB_REPO above, this always credits the original template
 // project, regardless of which repo this module was forked into. The
@@ -33,7 +36,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🔧 ZMK Module Template</h1>
+        <h1>🔧 zmk-feature-typing-heatmap</h1>
         <p>Custom Studio RPC Demo</p>
       </header>
 
@@ -108,7 +111,8 @@ function App() {
 
       <footer className="app-footer">
         <p>
-          <strong>Template Module</strong> - Customize this for your ZMK module
+          <strong>zmk-feature-typing-heatmap</strong> - Customize this for your
+          ZMK module
         </p>
         <p>
           <a
@@ -208,7 +212,7 @@ export function RPCTestSection() {
         <div className="warning-message">
           <p>
             ⚠️ Subsystem "{SUBSYSTEM_IDENTIFIER}" not found. Make sure your
-            firmware includes the template module. See the{" "}
+            firmware includes the feature-typing-heatmap module. See the{" "}
             <a href={`https://github.com/${GITHUB_REPO}#readme`}>
               module README
             </a>{" "}

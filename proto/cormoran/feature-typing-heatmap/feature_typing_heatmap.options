@@ -1,0 +1,5 @@
+# Nanopb options file for feature_typing_heatmap.proto
+# This defines max sizes for string fields
+
+cormoran.feature_typing_heatmap.SampleResponse.value    max_size:64
+cormoran.feature_typing_heatmap.ErrorResponse.message   max_size:64

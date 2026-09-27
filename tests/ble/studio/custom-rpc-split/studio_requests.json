@@ -9,7 +9,7 @@
       "call": {
         "subsystemIndex": 0,
         "payload": {
-          "$type": "your_name.template.Request",
+          "$type": "cormoran.feature_typing_heatmap.Request",
           "sample": { "value": 42 }
         }
       }
