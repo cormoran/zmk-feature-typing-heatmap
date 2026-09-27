@@ -34,8 +34,8 @@
   {
     "request_id": 4,
     "module": {
-      "mutation": {
-        "persistence_enabled": true
+      "error": {
+        "message": "Request failed (-2)"
       }
     }
   },
@@ -54,7 +54,7 @@
         "unsaved_presses": 0,
         "save_interval_seconds": 1800,
         "min_presses": 100,
-        "storage_error": 0,
+        "storage_error": -2,
         "persistence_supported": true,
         "persistence_enabled": true
       }
@@ -63,8 +63,8 @@
   {
     "request_id": 6,
     "module": {
-      "mutation": {
-        "persistence_enabled": false
+      "error": {
+        "message": "Request failed (-2)"
       }
     }
   },
@@ -83,17 +83,17 @@
         "unsaved_presses": 0,
         "save_interval_seconds": 1800,
         "min_presses": 100,
-        "storage_error": 0,
+        "storage_error": -2,
         "persistence_supported": true,
-        "persistence_enabled": false
+        "persistence_enabled": true
       }
     }
   },
   {
     "request_id": 8,
     "module": {
-      "mutation": {
-        "persistence_enabled": false
+      "error": {
+        "message": "Request failed (-2)"
       }
     }
   },
@@ -120,7 +120,7 @@
         "unsaved_presses": 0,
         "save_interval_seconds": 1800,
         "min_presses": 100,
-        "storage_error": 0,
+        "storage_error": -2,
         "persistence_supported": true,
         "persistence_enabled": true
       }
