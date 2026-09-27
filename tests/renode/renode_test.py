@@ -89,6 +89,17 @@ def _mon_is_true(mon, command: str) -> bool:
     return "True" in mon.execute(command, settle=0.3)
 
 
+def inject_heatmap_keypress(session, machine):
+    """Drive the fixture's active-low switch, ending with the key released."""
+    session.mon.execute(f'mach set "{machine}"')
+    session.mon.execute("sysbus.gpio0 OnGPIO 2 true")
+    time.sleep(0.5)
+    session.mon.execute("sysbus.gpio0 OnGPIO 2 false")
+    time.sleep(0.5)
+    session.mon.execute("sysbus.gpio0 OnGPIO 2 true")
+    time.sleep(0.5)
+
+
 class RenodeWiredSplitModuleTests(unittest.TestCase):
     """Boots the module's own wired-split pair once for the whole class (boot is
     the slow part) and exercises the custom subsystem over the central's USB
@@ -316,7 +327,7 @@ class RenodeWiredSplitModuleTests(unittest.TestCase):
         # Both halves use the same four-position transform. The central owns
         # the only counters, including peripheral-originated physical events.
         for machine in ("central", "peripheral"):
-            renode_harness.inject_keypress(self.session, machine=machine)
+            inject_heatmap_keypress(self.session, machine=machine)
             time.sleep(0.5)
         self.session.mon.execute('mach set "central"')
         counts = stats().stats

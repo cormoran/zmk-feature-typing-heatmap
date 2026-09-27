@@ -4,6 +4,10 @@ if(CONFIG_ZMK_FEATURE_TYPING_HEATMAP)
     target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/typing_heatmap.c
                                ${CMAKE_CURRENT_SOURCE_DIR}/src/typing_heatmap_state.c)
 
+    if(CONFIG_ZMK_FEATURE_TYPING_HEATMAP_BLE_TEST)
+        target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/ble/settings_bootstrap.c)
+    endif()
+
     # Split-relay sample: compiled into BOTH split roles, gated on ZMK's own
     # relay Kconfig -- see include/cormoran/feature-typing-heatmap/template_relay.h.
     if(CONFIG_ZMK_SPLIT_RELAY_EVENT)

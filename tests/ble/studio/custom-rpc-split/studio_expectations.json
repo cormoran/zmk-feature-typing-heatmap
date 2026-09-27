@@ -1,0 +1,137 @@
+[
+  {
+    "request_id": 1,
+    "custom": {
+      "list_custom_subsystems": {
+        "subsystems": [
+          {
+            "index": 0,
+            "identifier": "cormoran_typing_heatmap",
+            "ui_url": [
+              "https://cormoran.github.io/zmk-feature-typing-heatmap/"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request_id": 2,
+    "module": {
+      "sample": {
+        "value": "Hello from firmware! Received: 42"
+      }
+    }
+  },
+  {
+    "request_id": 3,
+    "module": {
+      "mutation": {
+        "persistence_enabled": true
+      }
+    }
+  },
+  {
+    "request_id": 4,
+    "module": {
+      "mutation": {
+        "persistence_enabled": true
+      }
+    }
+  },
+  {
+    "request_id": 5,
+    "module": {
+      "stats": {
+        "position_count": 4,
+        "offset": 0,
+        "counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "unsaved_presses": 0,
+        "save_interval_seconds": 1800,
+        "min_presses": 100,
+        "storage_error": 0,
+        "persistence_supported": true,
+        "persistence_enabled": true
+      }
+    }
+  },
+  {
+    "request_id": 6,
+    "module": {
+      "mutation": {
+        "persistence_enabled": false
+      }
+    }
+  },
+  {
+    "request_id": 7,
+    "module": {
+      "stats": {
+        "position_count": 4,
+        "offset": 0,
+        "counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "unsaved_presses": 0,
+        "save_interval_seconds": 1800,
+        "min_presses": 100,
+        "storage_error": 0,
+        "persistence_supported": true,
+        "persistence_enabled": false
+      }
+    }
+  },
+  {
+    "request_id": 8,
+    "module": {
+      "mutation": {
+        "persistence_enabled": false
+      }
+    }
+  },
+  {
+    "request_id": 9,
+    "module": {
+      "mutation": {
+        "persistence_enabled": true
+      }
+    }
+  },
+  {
+    "request_id": 10,
+    "module": {
+      "stats": {
+        "position_count": 4,
+        "offset": 0,
+        "counts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "unsaved_presses": 0,
+        "save_interval_seconds": 1800,
+        "min_presses": 100,
+        "storage_error": 0,
+        "persistence_supported": true,
+        "persistence_enabled": true
+      }
+    }
+  },
+  {
+    "request_id": 11,
+    "module": {
+      "error": {
+        "message": "Request failed (-22)"
+      }
+    }
+  }
+]

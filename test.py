@@ -79,6 +79,13 @@ class WestCommandsTests(unittest.TestCase):
             result.stdout + result.stderr,
         )
         self.assertNotIn("FAILED: ", result.stdout, result.stdout + result.stderr)
+        result = subprocess.run(
+            ["python3", str(THIS_DIR / "tests/ble/validate.py")],
+            cwd=THIS_DIR,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_zmk_build(self):
         self._test_zmk_build(

@@ -10,7 +10,122 @@
         "subsystemIndex": 0,
         "payload": {
           "$type": "cormoran.feature_typing_heatmap.Request",
-          "sample": { "value": 42 }
+          "sample": {
+            "value": 42
+          }
+        }
+      }
+    }
+  },
+  {
+    "custom": {
+      "call": {
+        "subsystemIndex": 0,
+        "payload": {
+          "$type": "cormoran.feature_typing_heatmap.Request",
+          "setPersistence": {
+            "enabled": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "custom": {
+      "call": {
+        "subsystemIndex": 0,
+        "payload": {
+          "$type": "cormoran.feature_typing_heatmap.Request",
+          "reset": {}
+        }
+      }
+    }
+  },
+  {
+    "custom": {
+      "call": {
+        "subsystemIndex": 0,
+        "payload": {
+          "$type": "cormoran.feature_typing_heatmap.Request",
+          "getStats": {
+            "offset": 0
+          }
+        }
+      }
+    }
+  },
+  {
+    "custom": {
+      "call": {
+        "subsystemIndex": 0,
+        "payload": {
+          "$type": "cormoran.feature_typing_heatmap.Request",
+          "setPersistence": {
+            "enabled": false
+          }
+        }
+      }
+    }
+  },
+  {
+    "custom": {
+      "call": {
+        "subsystemIndex": 0,
+        "payload": {
+          "$type": "cormoran.feature_typing_heatmap.Request",
+          "getStats": {
+            "offset": 0
+          }
+        }
+      }
+    }
+  },
+  {
+    "custom": {
+      "call": {
+        "subsystemIndex": 0,
+        "payload": {
+          "$type": "cormoran.feature_typing_heatmap.Request",
+          "reset": {}
+        }
+      }
+    }
+  },
+  {
+    "custom": {
+      "call": {
+        "subsystemIndex": 0,
+        "payload": {
+          "$type": "cormoran.feature_typing_heatmap.Request",
+          "setPersistence": {
+            "enabled": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "custom": {
+      "call": {
+        "subsystemIndex": 0,
+        "payload": {
+          "$type": "cormoran.feature_typing_heatmap.Request",
+          "getStats": {
+            "offset": 0
+          }
+        }
+      }
+    }
+  },
+  {
+    "custom": {
+      "call": {
+        "subsystemIndex": 0,
+        "payload": {
+          "$type": "cormoran.feature_typing_heatmap.Request",
+          "getStats": {
+            "offset": 5
+          }
         }
       }
     }
