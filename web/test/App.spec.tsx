@@ -7,6 +7,7 @@ import App from "../src/App";
 jest.mock("@zmkfirmware/zmk-studio-ts-client", () => ({
   create_rpc_connection: jest.fn(),
   call_rpc: jest.fn(),
+  MetaError: class extends Error {},
 }));
 
 jest.mock("@zmkfirmware/zmk-studio-ts-client/transport/gatt", () => ({
@@ -33,7 +34,7 @@ function setTransportSupport({
 }) {
   if (serial) {
     Object.defineProperty(navigator, "serial", {
-      value: {},
+      value: { getPorts: async () => [] },
       configurable: true,
     });
   } else {
@@ -64,7 +65,9 @@ describe("App Component", () => {
       expect(
         screen.getByRole("heading", { name: /zmk-feature-typing-heatmap/i })
       ).toBeInTheDocument();
-      expect(screen.getByText(/Custom Studio RPC Demo/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Key position counts, saved on your keyboard/i)
+      ).toBeInTheDocument();
     });
 
     it("should render footer with repo link", () => {
@@ -164,7 +167,7 @@ describe("App Component", () => {
       });
 
       expect(screen.getByText(/Disconnect/i)).toBeInTheDocument();
-      expect(screen.getByText(/RPC Test/i)).toBeInTheDocument();
+      expect(screen.getByText(/Typing heatmap/i)).toBeInTheDocument();
     });
 
     it("should connect to device via Bluetooth when connect button is clicked", async () => {

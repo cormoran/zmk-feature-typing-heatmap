@@ -1,11 +1,26 @@
 config ZMK_FEATURE_TYPING_HEATMAP
-    bool "Enable feature-typing-heatmap feature"
+    bool "Enable typing statistics"
+    select ZMK_LOW_PRIORITY_WORK_QUEUE if !ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL
 
 if ZMK_FEATURE_TYPING_HEATMAP
 
 config ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC
-    bool "Enable feature-typing-heatmap feature custom Studio RPC"
+    bool "Enable typing statistics custom Studio RPC"
     depends on ZMK_STUDIO
+
+config ZMK_FEATURE_TYPING_HEATMAP_SAVE_INTERVAL_SECONDS
+    int "Minimum seconds between automatic statistics saves"
+    range 60 86400
+    default 1800
+
+config ZMK_FEATURE_TYPING_HEATMAP_MIN_PRESSES
+    int "Minimum unsaved presses before an automatic save"
+    range 1 1000000
+    default 100
+
+config ZMK_FEATURE_TYPING_HEATMAP_TEST
+    bool "Emit statistics for native simulator event tests"
+    depends on ARCH_POSIX
 
 # The split-relay sample (src/split/template_relay.c) has no Kconfig of its
 # own: it follows ZMK's CONFIG_ZMK_SPLIT_RELAY_EVENT directly. Enable that

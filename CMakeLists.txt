@@ -1,6 +1,8 @@
 zephyr_include_directories(include)
 if(CONFIG_ZMK_FEATURE_TYPING_HEATMAP)
-    # target_sources(app PRIVATE ...)
+    # Observe positions before combo/keymap listeners can capture them.
+    target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/typing_heatmap.c
+                               ${CMAKE_CURRENT_SOURCE_DIR}/src/typing_heatmap_state.c)
 
     # Split-relay sample: compiled into BOTH split roles, gated on ZMK's own
     # relay Kconfig -- see include/cormoran/feature-typing-heatmap/template_relay.h.

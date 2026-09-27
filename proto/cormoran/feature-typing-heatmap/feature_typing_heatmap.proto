@@ -1,20 +1,40 @@
 syntax = "proto3";
-
 package cormoran.feature_typing_heatmap;
-
 message SampleRequest { int32 value = 1; }
-
 message SampleResponse { string value = 1; }
-
-message Request {
-    oneof request_type { SampleRequest sample = 1; }
+message GetStatsRequest { uint32 offset = 1; }
+message ResetRequest {}
+message SetPersistenceRequest { bool enabled = 1; }
+message StatsResponse {
+    uint32 offset = 1;
+    uint32 position_count = 2;
+    repeated uint32 counts = 3;
+    bool persistence_enabled = 4;
+    uint32 unsaved_presses = 5;
+    uint32 save_interval_seconds = 6;
+    uint32 min_presses = 7;
+    int32 storage_error = 8;
+    uint32 generation = 9;
+    bool persistence_supported = 10;
 }
-
+message MutationResponse {
+    bool persistence_enabled = 1;
+    uint32 generation = 2;
+}
+message Request {
+    oneof request_type {
+        SampleRequest sample = 1;
+        GetStatsRequest get_stats = 2;
+        ResetRequest reset = 3;
+        SetPersistenceRequest set_persistence = 4;
+    }
+}
 message ErrorResponse { string message = 1; }
-
 message Response {
     oneof response_type {
         ErrorResponse error = 1;
         SampleResponse sample = 2;
+        StatsResponse stats = 3;
+        MutationResponse mutation = 4;
     }
 }
