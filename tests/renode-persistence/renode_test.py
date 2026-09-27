@@ -109,6 +109,11 @@ class PersistenceTests(unittest.TestCase):
             flash = Path(self.temporary.name) / "erased.bin"
             flash.write_bytes(b"\xff" * self.storage_size)
         self.session.mon.execute(f"sysbus LoadBinary @{flash} {hex(self.storage_addr)}")
+        # Establish a released active-low switch before either CPU starts.
+        for machine in ("central", "peripheral"):
+            self.session.mon.execute(f'mach set "{machine}"')
+            self.session.mon.execute("sysbus.gpio0 OnGPIO 2 true")
+        self.session.mon.execute('mach set "central"')
         self.session.go()
         banner = h.wait_for_text(console._sock, "Welcome to ZMK", timeout=20)
         self.assertIn("Welcome to ZMK", banner)
@@ -140,8 +145,14 @@ class PersistenceTests(unittest.TestCase):
 
     def flash_snapshot(self, name):
         path = Path(self.temporary.name) / name
-        self.session.mon.execute("pause")
         self.session.mon.execute('mach set "central"')
+        self.session.mon.execute("pause")
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            if helpers._mon_is_true(self.session.mon, "machine IsPaused"):
+                break
+        else:
+            self.fail("Central did not pause before NVS flash capture")
         # Read only flash, never RAM or an emulator snapshot. The monitor's
         # embedded Python calls the same SystemBus read exposed by ReadBytes.
         command = f"python \"import System; System.IO.File.WriteAllBytes('{path}', monitor.Machine.SystemBus.ReadBytes({self.storage_addr}, {self.storage_size}))\""
