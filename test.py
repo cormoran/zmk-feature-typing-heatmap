@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 import unittest
@@ -10,7 +11,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 THIS_DIR = Path(__file__).parent.resolve()
-TEST_BUILD_DIR_NAME = "tests-zmk-module-template-with-custom-studio-rpc"
+TEST_BUILD_DIR_NAME = "tests-zmk-feature-typing-heatmap"
 
 
 def run_west(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -42,7 +43,7 @@ class WestCommandsTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.WEST_TOPDIR = Path(run_west(["topdir"]).stdout.strip())
-        cls.BUILD_DIR = cls.WEST_TOPDIR / "build"
+        cls.BUILD_DIR = THIS_DIR / "build"
 
     @unittest.skipUnless(
         platform.system() == "Linux", "zmk-test is only supported on Linux"
@@ -54,7 +55,13 @@ class WestCommandsTests(unittest.TestCase):
         result = run_west(["zmk-test", "tests", "-m", ".", "-d", str(test_build_dir)])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PASS: studio", result.stdout, result.stdout + result.stderr)
+        self.assertIn(
+            "PASS: typing-heatmap", result.stdout, result.stdout + result.stderr
+        )
         self.assertNotIn("FAILED: ", result.stdout, result.stdout + result.stderr)
+        self._test_heatmap_listener_order(
+            test_build_dir / "tests/typing-heatmap/zephyr/zmk.map", require_combo=True
+        )
 
     @unittest.skipUnless(
         platform.system() == "Linux" and os.environ.get("BSIM_OUT_PATH"),
@@ -72,43 +79,61 @@ class WestCommandsTests(unittest.TestCase):
             result.stdout + result.stderr,
         )
         self.assertNotIn("FAILED: ", result.stdout, result.stdout + result.stderr)
+        result = subprocess.run(
+            ["python3", str(THIS_DIR / "tests/ble/validate.py")],
+            cwd=THIS_DIR,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_zmk_build(self):
         self._test_zmk_build(
             {
-                "module_template_board_feature_disabled": ConfigAndDeviceTree(
+                "feature_typing_heatmap_board_feature_disabled": ConfigAndDeviceTree(
                     config=[
                         'CONFIG_ZMK_KEYBOARD_NAME="Module Test"',
                         "CONFIG_ZMK_USB=y",
                         "CONFIG_ZMK_BLE=y",
-                        "# CONFIG_ZMK_TEMPLATE_FEATURE is not set",
+                        "# CONFIG_ZMK_FEATURE_TYPING_HEATMAP is not set",
                     ],
                     device=[
                         "DT_COMPAT_HAS_OKAY_zmk_keymap",
                     ],
                 ),
-                "module_template_board_with_rpc": ConfigAndDeviceTree(
+                "feature_typing_heatmap_board_with_rpc": ConfigAndDeviceTree(
                     config=[
                         "CONFIG_ZMK_STUDIO=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP=y",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y",
+                        "CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE=256",
                     ],
                     device=[],
                 ),
-                "module_template_board_without_rpc": ConfigAndDeviceTree(
+                "feature_typing_heatmap_board_without_rpc": ConfigAndDeviceTree(
                     config=[
-                        "CONFIG_ZMK_TEMPLATE_FEATURE=y",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP=y",
                         "# CONFIG_ZMK_STUDIO is not set",
-                        NotFound("CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC"),
+                        NotFound("CONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC"),
+                    ],
+                    device=[],
+                ),
+                "feature_typing_heatmap_board_ram": ConfigAndDeviceTree(
+                    config=[
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP=y",
+                        "# CONFIG_ZMK_STUDIO is not set",
+                        "# CONFIG_SETTINGS is not set",
+                        "# CONFIG_ZMK_BLE is not set",
                     ],
                     device=[],
                 ),
                 # DUT of the web UI end-to-end test (web/e2e/): as
-                # module_template_board_with_rpc, but unlocked -- see build.yaml.
+                # feature_typing_heatmap_board_with_rpc, but unlocked -- see build.yaml.
                 "web_e2e": ConfigAndDeviceTree(
                     config=[
                         "CONFIG_ZMK_STUDIO=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y",
+                        "CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE=256",
                         "# CONFIG_ZMK_STUDIO_LOCKING is not set",
                     ],
                     device=[],
@@ -118,8 +143,9 @@ class WestCommandsTests(unittest.TestCase):
                         # Verify that zmk-feature-custom-settings is present and enabled
                         "zmk-feature-custom-settings",
                         "CONFIG_ZMK_STUDIO=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP=y",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y",
+                        "CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE=256",
                         "CONFIG_ZMK_CUSTOM_SETTINGS=y",
                         "CONFIG_ZMK_CUSTOM_SETTINGS_STUDIO_RPC=y",
                         "CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE=128",
@@ -136,12 +162,24 @@ class WestCommandsTests(unittest.TestCase):
                 "usb_wired_central": ConfigAndDeviceTree(
                     config=[
                         "CONFIG_ZMK_STUDIO=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE=y",
-                        "CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP=y",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y",
+                        "CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE=256",
                         "CONFIG_ZMK_SPLIT=y",
                         "CONFIG_ZMK_SPLIT_ROLE_CENTRAL=y",
                         "CONFIG_ZMK_USB=y",
                         "# CONFIG_ZMK_BLE is not set",
+                    ],
+                    device=[],
+                ),
+                "usb_wired_persistence": ConfigAndDeviceTree(
+                    config=[
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP=y",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y",
+                        "CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE=256",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP_SAVE_INTERVAL_SECONDS=60",
+                        "CONFIG_ZMK_FEATURE_TYPING_HEATMAP_MIN_PRESSES=2",
+                        "CONFIG_ZMK_SPLIT_ROLE_CENTRAL=y",
                     ],
                     device=[],
                 ),
@@ -150,7 +188,7 @@ class WestCommandsTests(unittest.TestCase):
                         "CONFIG_ZMK_SPLIT=y",
                         "# CONFIG_ZMK_SPLIT_ROLE_CENTRAL is not set",
                         "# CONFIG_ZMK_STUDIO is not set",
-                        "# CONFIG_ZMK_TEMPLATE_FEATURE is not set",
+                        "# CONFIG_ZMK_FEATURE_TYPING_HEATMAP is not set",
                         "# CONFIG_ZMK_BLE is not set",
                     ],
                     device=[],
@@ -165,7 +203,19 @@ class WestCommandsTests(unittest.TestCase):
         for artifact in artifacts_and_expected_build_params.keys():
             shutil.rmtree(self.BUILD_DIR / artifact, ignore_errors=True)
 
-        result = run_west(["zmk-build", "tests/zmk-config", "-q"])
+        result = run_west(
+            [
+                "zmk-build",
+                "tests/zmk-config",
+                "-m",
+                ".",
+                "-d",
+                str(self.BUILD_DIR),
+                "-P",
+                "4",
+                "-q",
+            ]
+        )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
         for artifact, entries in artifacts_and_expected_build_params.items():
@@ -181,6 +231,8 @@ class WestCommandsTests(unittest.TestCase):
             self._test_strings_in_file(
                 config_path, entries.config, f"{artifact} config"
             )
+            if "CONFIG_ZMK_FEATURE_TYPING_HEATMAP=y" in config_path.read_text():
+                self._test_heatmap_listener_order(artifact_dir / "zmk.map")
             if entries.device:
                 self._test_strings_in_file(
                     device_tree_path, entries.device, f"{artifact} device tree"
@@ -189,6 +241,29 @@ class WestCommandsTests(unittest.TestCase):
                 (artifact_dir / "zmk.uf2").exists(),
                 f"{artifact} zmk.uf2 is missing in {artifact_dir}",
             )
+
+    def _test_heatmap_listener_order(self, map_path: Path, require_combo: bool = False):
+        # Position observers must run before combo/keymap can capture the event.
+        text = map_path.read_text()
+
+        def address(listener: str):
+            match = re.search(
+                rf"^\s*(0x[0-9a-fA-F]+)\s+zmk_event_sub_{listener}zmk_position_state_changed\s*$",
+                text,
+                re.MULTILINE,
+            )
+            return int(match.group(1), 16) if match else None
+
+        observer = address("typing_heatmap")
+        keymap = address("keymap")
+        combo = address("combo")
+        self.assertIsNotNone(observer, str(map_path))
+        self.assertIsNotNone(keymap, str(map_path))
+        self.assertLess(observer, keymap, str(map_path))
+        if require_combo:
+            self.assertIsNotNone(combo, str(map_path))
+        if combo is not None:
+            self.assertLess(observer, combo, str(map_path))
 
     def _test_strings_in_file(
         self, file_path: Path, expected_strings: list[str | NotFound], hint: str

@@ -19,7 +19,7 @@
  * consume both, so there is NO UART left for a Studio RPC transport -- the
  * wired-split smoke proves the split pairing/relay, not Studio (see
  * docs/renode-testing.md). This overlay is for Renode emulation only -- the
- * uart1 pins (P0.02/P0.03) are not verified conflict-free on a real XIAO board.
+ * uart1 pins (P0.20/P0.22) avoid the emulated kscan pins; do not flash this fixture.
  *
  * Renode gotchas: the stock xiao_ble board enables
  * &qspi/&p25q16h (external NOR flash) and &usbd/&board_cdc_acm_uart (USB CDC);
@@ -45,21 +45,22 @@
 	status = "disabled";
 };
 
+/* Keep UART pins separate from kscan P0.02/P0.03 to avoid startup presses. */
 &pinctrl {
 	uart1_default: uart1_default {
 		group1 {
-			psels = <NRF_PSEL(UART_TX, 0, 2)>;
+			psels = <NRF_PSEL(UART_TX, 0, 20)>;
 		};
 		group2 {
-			psels = <NRF_PSEL(UART_RX, 0, 3)>;
+			psels = <NRF_PSEL(UART_RX, 0, 22)>;
 			bias-pull-up;
 		};
 	};
 
 	uart1_sleep: uart1_sleep {
 		group1 {
-			psels = <NRF_PSEL(UART_TX, 0, 2)>,
-					<NRF_PSEL(UART_RX, 0, 3)>;
+			psels = <NRF_PSEL(UART_TX, 0, 20)>,
+					<NRF_PSEL(UART_RX, 0, 22)>;
 			low-power-enable;
 		};
 	};

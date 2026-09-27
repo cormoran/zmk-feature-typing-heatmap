@@ -78,6 +78,13 @@ jobs:
           elf-path: build/usb_wired_central/zephyr/zmk.elf
           peripheral-elf: build/usb_wired_peripheral/zephyr/zmk.elf
           tests: tests/renode
+      - name: Verify automatic checkpoints and boot restore
+        uses: cormoran/zmk-west-commands/.github/actions/zmk-renode-test@main
+        with:
+          mode: wired-split
+          elf-path: build/usb_wired_persistence/zephyr/zmk.elf
+          peripheral-elf: build/usb_wired_peripheral/zephyr/zmk.elf
+          tests: tests/renode-persistence
 
   ble-test:
     runs-on: ubuntu-latest
@@ -100,6 +107,8 @@ jobs:
         with:
           tests: tests/ble
           module: .
+      - name: Validate heatmap BLE responses
+        run: python3 tests/ble/validate.py
       - name: Upload logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v4

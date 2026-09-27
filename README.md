@@ -1,236 +1,162 @@
-# cormoran's ZMK Module Template for ZMK (with Custom Studio RPC)
+# zmk-feature-typing-heatmap
 
-![ZMK Version](https://img.shields.io/badge/ZMK-master-blue)
-[![Test](https://github.com/cormoran/zmk-module-template/actions/workflows/zmk-module.yml/badge.svg?branch=main)](https://github.com/cormoran/zmk-module-template/actions/workflows/zmk-module.yml) [![Devcontainer](https://github.com/cormoran/zmk-module-template/actions/workflows/devcontainer.yml/badge.svg?branch=main)](https://github.com/cormoran/zmk-module-template/actions/workflows/devcontainer.yml)
+A ZMK typing statistics module with a Web UI using the unofficial custom
+ZMK Studio RPC protocol. It counts physical key presses by key position,
+including positions forwarded from a split peripheral to the central.
+Counts are independent of the active layer or the keycode assigned to a key.
 
-This repository contains a template for a ZMK module with Web UI using the **unofficial** custom ZMK Studio RPC protocol.
+## Features
 
-It's extended from ZMK official template with [zmk-west-commands](https://github.com/cormoran/zmk-west-commands), test code template, coding agent support, and custom Studio RPC protocol support.
-
-## Summary
-
-This template includes:
-
-- **Firmware**: Sample custom Studio RPC handler (`src/studio/template_handler.c`)
-- **Protocol**: Protobuf definition (`proto/your-name/template/template.proto`)
-- **Web UI**: React + TypeScript app (`web/`) using [@cormoran/zmk-studio-react-hook](https://github.com/cormoran/react-zmk-studio)
-- **Tests**: Firmware unit tests (`tests/studio/`) and build tests (`tests/zmk-config/`)
-
-Read through the [ZMK Module Creation](https://zmk.dev/docs/development/module-creation) page for details on how to configure this template.
-
-## More Info
-
-For more info on modules, you can read through through the [Zephyr modules page](https://docs.zephyrproject.org/3.5.0/develop/modules.html) and [ZMK's page on using modules](https://zmk.dev/docs/features/modules). [Zephyr's west manifest page](https://docs.zephyrproject.org/3.5.0/develop/west/manifest.html#west-manifests) may also be of use.
+- One saturating 32-bit counter per key position.
+- Read statistics in pages through Studio RPC, or view them in the Web UI.
+- Reset statistics and switch persistence mode from the Web UI.
+- Persistent mode saves at most once every 30 minutes, and only after at
+  least 100 new presses. Recent unsaved presses can be lost on reboot.
+- RAM-only mode keeps statistics until reboot without writing press counts
+  to flash. Switching to RAM-only clears the previous saved statistics.
+- Storage uses one compact versioned record containing the counter array;
+  it does not store timestamps or individual key events.
 
 ## Module User Guide
 
-1. Add dependency to your `config/west.yml`. Note: this module requires a patched ZMK with custom Studio RPC support.
+This module requires cormoran's patched ZMK branch with custom Studio RPC
+support. Add these projects and the remote to your configuration's west
+manifest, merging them into existing entries rather than duplicating ZMK:
 
-   ```yml
-   manifest:
-       remotes:
-           ...
-           - name: cormoran
-           url-base: https://github.com/cormoran
-       projects:
-           ...
-           - name: zmk-module-template
-           remote: cormoran
-           revision: main+custom-studio-protocol # or latest commit hash
-           import: true
-           ...
-           # Required: patched ZMK with custom Studio RPC support
-           - name: zmk
-           remote: cormoran
-           revision: main+custom-studio-protocol
-           import:
-               file: app/west.yml
-   ```
-
-2. Enable flags in your `config/<shield>.conf`
-
-   ```conf
-   CONFIG_ZMK_TEMPLATE_FEATURE=y
-
-   # Optionally enable custom Studio RPC
-   CONFIG_ZMK_STUDIO=y
-   CONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y
-   CONFIG_ZMK_CUSTOM_SETTINGS=y
-   CONFIG_ZMK_CUSTOM_SETTINGS_STUDIO_RPC=y
-   CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE=128
-   CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE=2048
-   ```
-
-3. Implement your custom protocol by editing:
-   - `proto/your-name/template/template.proto` — message types
-   - `src/studio/template_handler.c` — firmware RPC handler
-   - `web/src/App.tsx` — web UI
-
-### Web UI
-
-See [web/README.md](./web/README.md) for web UI development instructions.
-
-### Publishing Web UI
-
-**GitHub Pages**: Merge a pull request into `main+custom-studio-protocol` to deploy to `https://<account>.github.io/<repo>/`.
-
-**Cloudflare Workers (PR previews)**: Configure `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets. Previews are optional — when the secrets are absent (e.g. a fresh repo created from this template), the workflow stays green and simply comments on the PR explaining how to enable them instead of deploying.
-
-## Module Development Guide
-
-### Initialize from template
-
-Right after creating a repository from this template, run the initialization
-script and follow the checklist in [AGENTS.md](./AGENTS.md):
-
-```bash
-python3 scripts/init_module.py --namespace <your-github-name> --module <feature-name>
+```yaml
+manifest:
+  remotes:
+    - name: cormoran
+      url-base: https://github.com/cormoran
+  projects:
+    - name: zmk-feature-typing-heatmap
+      remote: cormoran
+      revision: main
+      import: true
+    - name: zmk
+      remote: cormoran
+      revision: main+custom-studio-protocol
+      import:
+        file: app/west.yml
 ```
 
-It replaces every template placeholder (identifiers, paths, URLs, artifact
-names) and verifies nothing is left (`--verify-only` re-checks at any time).
+Enable the module in your keyboard configuration (on the central for a split):
 
-### Setup for running test
-
-#### Option0: Dev container (recommended)
-
-Open this repository in VS Code with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers). The container automatically initializes the west workspace using the isolated layout.
-
-#### Option1: west workspace directory layout
-
-Set west topdir as parent of repository root and download dependencies under `../`.
-This layout is useful to reduce disk usage by sharing dependencies with other zephyr modules.
-The build result is located in `../build`.
-
-```bash
-mkdir west-workspace
-cd west-workspace # this directory becomes west workspace root (topdir)
-git clone <this repository>
-# rm -r .west # if exists to reset workspace
-west init -l . --mf west/west-test-workspace.yml
-west update --narrow
-west zephyr-export
+```conf
+CONFIG_ZMK_FEATURE_TYPING_HEATMAP=y
+CONFIG_ZMK_STUDIO=y
+CONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y
+CONFIG_ZMK_STUDIO_RPC_RX_BUF_SIZE=128
+CONFIG_ZMK_STUDIO_RPC_TX_BUF_SIZE=256
+CONFIG_ZMK_LOW_PRIORITY_THREAD_STACK_SIZE=2048
 ```
 
-#### Option2: isolated directory layout
+Build with the `studio-rpc-usb-uart` snippet (or your keyboard's Studio USB
+transport). Open the [Web UI](https://cormoran.github.io/zmk-feature-typing-heatmap/)
+in Chrome or Edge, connect via USB or supported Studio Bluetooth, and press
+**Refresh** to retrieve statistics. Counters are indexed by ZMK key position,
+starting at zero; the grid is an index view, not your keyboard's physical layout.
+**Export JSON** downloads the current snapshot. **Reset statistics** asks for
+confirmation and clears both live and stored statistics. The module's RPC is
+unsecured by default; a firmware variant using secured handlers requires your
+keyboard's `&studio_unlock` binding. See [web/README.md](web/README.md).
 
-Set west topdir as repository root and download dependencies under `./dependencies`.
-This layout is useful if you don't want to share dependencies to other zephyr modules.
-Dev container and github actions uses this layout.
-The build result is located in `./build`.
+### Configure automatic saves
 
-```bash
-git clone <this repository>
-cd <cloned directory>
-# Idempotent helper shared with the devcontainer and CI: runs
-# `west init -l west --mf west-test-isolated.yml`, `west update --narrow`,
-# and `west zephyr-export`.
-bash scripts/setup_workspace.sh
+Optional compile-time overrides (defaults shown):
+
+```conf
+CONFIG_ZMK_FEATURE_TYPING_HEATMAP_SAVE_INTERVAL_SECONDS=1800
+CONFIG_ZMK_FEATURE_TYPING_HEATMAP_MIN_PRESSES=100
 ```
 
-### Pre-commit
+The interval accepts 60–86,400 seconds and the threshold 1–1,000,000 presses.
+Choose a long interval to reduce flash wear. The Web UI reports both values.
 
-Every commit need to pass pre-commit verification. The verification contains formatting code and running tests.
+### Persistence and data loss
 
+The module counts presses on the central or standalone keyboard; split
+peripherals require no module configuration. Releases, held-key repeats from
+the host, and synthetic macro keycodes do not add counts. Each position's
+counter saturates at 4,294,967,295 instead of wrapping.
+
+Both the interval and minimum new presses must be met for an automatic save.
+The interval also limits retries after a failed automatic save, preserving
+low write frequency. The defaults limit automatic save attempts to at most
+48 per day of continuous use. Low activity below the minimum is intentionally left unsaved. Rebooting
+can lose all presses since the last successful checkpoint; there is no
+shutdown or disconnect save.
+
+Turning **Persistence** off keeps the current live counts but replaces saved
+statistics with a header-only RAM-mode record. Further presses stay in RAM,
+and every boot in that mode starts at zero. Turning it back on preserves live
+counts, starts a fresh interval, and requires the minimum number of subsequent
+presses before the next checkpoint. Mode switches and explicit resets perform
+one intentional record write regardless of the automatic save thresholds.
+Failures are reported without claiming that a reset or mode change succeeded.
+Firmware with `CONFIG_SETTINGS=n` supports RAM-only statistics without Studio
+RPC. The current Studio implementation selects settings support; its Web UI
+can still switch the statistics to RAM mode.
+
+The stored record is 12 bytes plus 4 bytes per position (412 bytes for 100
+positions), excluding Zephyr's storage bookkeeping. No per-press history or
+timestamps are stored. A record for a different position count or format
+version is rejected. If you change a layout while keeping the same position
+count, reset the statistics yourself so old counts are not attributed to new
+positions. Counter arrays track the largest compiled physical layout.
+
+Only counts, mode and format metadata belong to this compact record. The
+module does not repeatedly persist runtime preferences through the generic
+custom-settings registry; mode and counts share one atomic settings record.
+
+## Development
+
+Follow [AGENTS.md](AGENTS.md) and the repository skills. In this
+zmk-workspace, select a compatible shared West profile and use a worktree
+under it. Run firmware commands in the workspace Nix devshell, and keep all
+build output in the worktree's own `build/` directory.
+
+```sh
+python3 scripts/init_module.py --verify-only
+python3 -m unittest -v
+west zmk-build tests/zmk-config -m . -d ./build -q
+west zmk-test tests -m . -d ./build
 ```
-pip install pre-commit
-pre-commit install
 
-# Run pre-commit manually
-pre-commit run --all-files
-# Run for git staged files
-pre-commit run
-```
+Run frontend checks outside the Nix devshell:
 
-### Running Test
-
-```bash
-# Run unit test + build test and verify the results
-python3 -m unittest
-# Run build test directly
-west zmk-build tests/zmk-config
-# Run unit test directly
-west zmk-test tests -m .
-# Run web tests
-cd web && npm test
+```sh
+cd web
+NPM_CONFIG_ALLOW_GIT=all npm ci
+npm run generate
+npm run lint
+npm test -- --runInBand
+VITE_BASE=/ npm run build
+VITE_BASE=/zmk-feature-typing-heatmap/ npm run build
 ```
 
 ### Hardware-free Renode testing
 
-CI boots the firmware in the [Renode](https://renode.io/) emulator (a `Build`
-job step) and runs `tests/renode/` -- `renode_test.py` is the file a module
-built from this template rewrites for its own RPC surface. It uses
-`west zmk-renode-test`'s **`wired-split`** mode: a wired split pair whose central
-answers Studio RPC over the emulated **USB CDC** while the wired split link
-forwards key events, covering both the central-only Studio path and the split
-path. The ELFs are the `usb_wired_central` / `usb_wired_peripheral` artifacts in
-`tests/zmk-config/build.yaml`. Locally:
+The test configuration includes USB wired central/peripheral images. Run:
 
-```bash
-west zmk-build tests/zmk-config -af usb_wired_central
-west zmk-build tests/zmk-config -af usb_wired_peripheral
+```sh
 west zmk-renode-test tests/renode --mode wired-split \
-    --elf build/usb_wired_central/zephyr/zmk.elf \
-    --peripheral-elf build/usb_wired_peripheral/zephyr/zmk.elf
+  --elf build/usb_wired_central/zephyr/zmk.elf \
+  --peripheral-elf build/usb_wired_peripheral/zephyr/zmk.elf
 ```
-
-The module's own split-relay *sample* (the central forwarding a value to the
-peripheral) is not exercised here -- ZMK's relay-over-wired transport is newer
-than this repo's pinned zmk, so it is covered by the BabbleSim BLE test instead
-(see below). Details (the mode + `ZMK_RENODE_*` env contract): see
-[zmk-west-commands' README, `west zmk-renode-test`](https://github.com/cormoran/zmk-west-commands#west-zmk-renode-test)
-and [docs/renode-testing.md](https://github.com/cormoran/zmk-west-commands/blob/main/docs/renode-testing.md).
 
 ### Web UI end-to-end testing
 
-`web/e2e/` runs the **web UI itself**, in a headless browser, against this
-module's **real firmware** in Renode -- no hardware (CI's `Web UI E2E Test`
-workflow). `west zmk-web-e2e` boots the DUT, serves its Studio RPC (over the
-emulated USB CDC) to the browser and hands the test a `navigator.serial` shim,
-so the app, its transport, the RPC framing and the firmware are all real -- only
-the browser's serial driver is faked. `rpc.spec.ts` connects through the app's
-own button and round-trips the module's custom RPC; rewrite its assertions for
-your own requests. Locally:
+The browser end-to-end test connects to real firmware running in Renode:
 
-```bash
-west zmk-build tests/zmk-config -af web_e2e
+```sh
 west zmk-web-e2e --elf build/web_e2e/zephyr/zmk.elf -- npm --prefix web run e2e
 ```
 
-The DUT (the `web_e2e` artifact) is the real `studio-rpc-usb-uart` image with
-Studio locking off -- an emulator has no key to press `&studio_unlock` with.
-Details (the shim's permission model, the `ZMK_WEB_E2E_*` env contract,
-debugging): see
-[zmk-west-commands' docs/zmk-web-e2e.md](https://github.com/cormoran/zmk-west-commands/blob/main/docs/zmk-web-e2e.md).
-
 ### Running BLE (BabbleSim) tests
 
-`tests/ble/` runs real `nrf52_bsim` firmware on a simulated radio (x86 Linux
-only; CI's `ble-test` job). The one case, `studio/custom-rpc-split`, checks --
-in a split central+peripheral topology -- that the custom Studio RPC answers
-over the BLE GATT transport while the split link is active, AND that the
-split-relay sample delivers the RPC value to the peripheral (asserted via the
-peripheral's log line). The Studio host side is one declarative
-`studio_requests.json` -- no host C code in this module. Locally:
+When a BabbleSim environment is available:
 
-```bash
-west zmk-ble-test tests/ble -m .   # --auto-accept regenerates snapshots
+```sh
+west zmk-ble-test tests/ble -m .
 ```
-
-Details (case-file conventions, JSON DSL, `{prefix}`/`{studio_host}`,
-BabbleSim setup, peripheral assertion): see
-[zmk-west-commands' README, `west zmk-ble-test`](https://github.com/cormoran/zmk-west-commands#west-zmk-ble-test).
-
-### Sync changes from template
-
-Run `Actions > Sync Changes in Template > Run workflow` to get the latest template changes as a pull request.
-
-If the template contains changes in `.github/workflows/*`, register a GitHub personal access token as `GH_TOKEN` repository secret (`repo` + `workflow` scopes).
-
-### Coding agent on actions
-
-Actions for github copilot and claude are available.
-
-- Mention `@copilot`
-- Setup `ANTHROPIC_API_KEY` secret and mention `@claude`
-  - Or fix [claude.yml](./github/workflows/claude.yml) to use `CLAUDE_CODE_OAUTH_TOKEN`

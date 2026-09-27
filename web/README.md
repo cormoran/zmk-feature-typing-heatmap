@@ -1,188 +1,58 @@
-# ZMK Module Template - Web Frontend
+# Typing heatmap Web UI
 
-This is a minimal web application template for interacting with ZMK firmware
-modules that implement custom Studio RPC subsystems.
+Connect a keyboard running `zmk-feature-typing-heatmap` over USB (Web Serial)
+or Bluetooth (Web Bluetooth) using Chrome or Edge on HTTPS or localhost.
+The keyboard must enable ZMK Studio and the module's custom Studio RPC.
+USB reconnects once automatically if a previously paired port is available.
+Some keyboards need `&studio_unlock` before appearing in the Bluetooth picker.
 
-## Features
+The screen loads statistics once after connecting. **Refresh** reads a fresh
+snapshot; the app does not poll. Each cell is a ZMK key position index, not a
+physical layout or key label. **Export JSON** downloads the displayed snapshot,
+including counters, save policy and total presses. **Reset statistics** requires
+confirmation and clears both current counts and the stored snapshot.
 
-- **Dual transport with feature detection**: Connect via USB (Web Serial) or
-  Bluetooth (Web Bluetooth), whichever the browser supports; shows guidance
-  when neither is available (both are Chromium-only and require HTTPS or
-  localhost). Some firmware only advertises the Studio Bluetooth service once
-  unlocked (`&studio_unlock`) -- the browser's device picker won't show the
-  keyboard until then, so the UI hints at this under the Bluetooth button.
-- **Auto-reconnect**: On page load, silently reconnects to a previously
-  paired serial port if one exists, no picker shown. If more than one device
-  has been paired, prefers whichever one was last successfully connected to
-  (remembered in `sessionStorage`) instead of an arbitrary one.
-- **Studio unlock flow**: Prompts the user to press `&studio_unlock` when a
-  secured RPC call is rejected, and retries automatically once the device
-  reports it's unlocked (manual Retry button as a fallback).
-- **Custom RPC**: Communicate with your custom firmware module using protobuf
-  via `useCustomSubsystem`.
-- **React + TypeScript**: Modern web development with Vite for fast builds.
-- **react-zmk-studio**: Uses the `@cormoran/zmk-studio-react-hook` library for
-  simplified ZMK integration.
+**Save statistics across restarts** controls keyboard storage. Automatic saves
+require both the displayed interval since the last save attempt (default 1800
+seconds) and minimum new presses
+(default 100). Unsaved presses are lost on restart or power loss. Memory mode
+keeps counts for the current session only; switching to it removes the previous
+saved statistics. Enabling persistence starts a new save interval. Reset and mode
+changes write a small record immediately. Firmware without storage support shows
+a disabled persistence checkbox and an explanation.
 
-## Quick Start
+A storage error preserves RAM statistics and is shown explicitly. If counts change
+between pages, the app retries up to three complete reads, then asks you to pause
+typing and Refresh. Failed reset/mode operations must be retried explicitly.
+Secured firmware variants show unlock guidance when an RPC is rejected; the
+default module RPC works while Studio is locked.
+
+## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Generate TypeScript types from proto
+NPM_CONFIG_ALLOW_GIT=all npm ci
 npm run generate
-
-# Run development server
 npm run dev
-
-# Build for production
-npm run build
-
-# Run tests
-npm test
+npm run lint
+npm test -- --runInBand
+VITE_BASE=/ npm run build
+VITE_BASE=/zmk-feature-typing-heatmap/ npm run build
 ```
 
-## Project Structure
+Protocol types are generated from `../proto` via `buf.gen.yaml`; do not edit them
+by hand. `src/heatmap.ts` owns the stable codec and bounded page reader.
+`src/TypingHeatmapSection.tsx` uses scalar subsystem index and connection loader
+identities, preventing render loops and ignoring old session responses. Unit tests
+cover connection buttons, stable loading, pagination, mutations, unsupported
+storage, overlapping actions and stale connections.
 
-```
-src/
-├── main.tsx              # React entry point
-├── App.tsx               # Main application with connection UI
-├── App.css               # Styles
-└── proto/                # Generated protobuf TypeScript types
-    └── your-name/template/
-        └── template.ts
-
-test/
-├── App.spec.tsx              # Tests for App component
-└── RPCTestSection.spec.tsx   # Tests for RPC functionality
-```
-
-## How It Works
-
-### 1. Protocol Definition
-
-The protobuf schema is defined in `../proto/your-name/template/template.proto`.
-
-### 2. Code Generation
-
-TypeScript types are generated using `ts-proto`:
+The integration test uses real firmware in Renode:
 
 ```bash
-npm run generate
+west zmk-build tests/zmk-config -af web_e2e
+west zmk-web-e2e --elf build/web_e2e/zephyr/zmk.elf -- npm --prefix web run e2e
 ```
 
-This runs `buf generate` which uses the configuration in `buf.gen.yaml`.
-
-### 3. Using react-zmk-studio
-
-The app uses the `@cormoran/zmk-studio-react-hook` library. `App.tsx` uses the
-higher-level `useCustomSubsystem` hook, which collapses
-`findSubsystem` + `ZMKCustomSubsystem` + protobuf encode/decode into one call:
-
-```typescript
-import { useCustomSubsystem } from "@cormoran/zmk-studio-react-hook";
-import { Request, Response } from "./proto/your-name/template/template";
-
-const { ready, call } = useCustomSubsystem("your_name__template", {
-  encode: (r: Request) => Request.encode(r).finish(),
-  decode: Response.decode,
-});
-
-if (ready) {
-  const response = await call({ sample: { value: 42 } });
-}
-```
-
-### 4. Dual transport with feature detection
-
-`App.tsx` shows a "🔌 Connect USB" button when `isWebSerialSupported()` is
-true and a "📶 Connect Bluetooth" button when `isWebBluetoothSupported()` is
-true (both are Chromium-only APIs and require a secure context: HTTPS or
-localhost). When neither is available, the app shows a short message asking
-for a Chromium-based browser instead of a dead connect button.
-
-### 5. Auto-reconnect
-
-`<ZMKConnection autoReconnect>` tries once, on mount, to reconnect to a
-previously-paired serial port (`navigator.serial.getPorts()`) without
-prompting the user again. If there is no paired port, or reconnecting fails
-(e.g. the device was unplugged), the app just stays on the normal
-disconnected screen -- no error is shown.
-
-### 6. Studio unlock flow
-
-Secured custom RPCs (and the settings subsystem) reject calls with an
-`UNLOCK_REQUIRED` error while ZMK Studio is locked on the device. This
-template ships the full flow by default, even though the sample firmware
-handler in `src/studio/template_handler.c` is registered as
-`ZMK_STUDIO_RPC_HANDLER_UNSECURED` (so the sample RPC never actually hits it)
--- switching that handler to `ZMK_STUDIO_RPC_HANDLER_SECURED` requires no web
-changes:
-
-- `useStudioLockState()` tracks the device's lock state and disables the Send
-  button (with a slim "🔒 ZMK Studio is locked" banner) whenever it's locked.
-- If a call is rejected with `isUnlockRequiredError(error)`, the app shows an
-  unlock prompt card ("press `&studio_unlock` on your keyboard") instead of
-  the response box.
-- Once `useStudioLockState()` reports the device unlocked again, the pending
-  request retries automatically; a manual **Retry** button covers a missed
-  notification.
-
-## Testing
-
-```bash
-# Run all tests
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Run tests with coverage
-npm run test:coverage
-```
-
-### Writing Tests
-
-Use the test helpers from `@cormoran/zmk-studio-react-hook/testing`:
-
-```typescript
-import {
-  createConnectedMockZMKApp,
-  ZMKAppProvider,
-} from "@cormoran/zmk-studio-react-hook/testing";
-
-const mockZMKApp = createConnectedMockZMKApp({
-  deviceName: "Test Device",
-  subsystems: ["your_name__template"],
-});
-
-render(
-  <ZMKAppProvider value={mockZMKApp}>
-    <YourComponent />
-  </ZMKAppProvider>
-);
-```
-
-`test/App.spec.tsx` mocks both `@zmkfirmware/zmk-studio-ts-client/transport/serial`
-and `.../transport/gatt` to cover feature detection and both connect buttons;
-jsdom defines neither `navigator.serial` nor `navigator.bluetooth` by default,
-so tests define/delete them per case. `test/RPCTestSection.spec.tsx` covers
-the unlock flow by mocking `call_rpc` to reject with a `MetaError` whose
-condition is `UNLOCK_REQUIRED`, then asserting the prompt appears and that
-both the manual Retry button and a simulated `lockStateChanged` notification
-successfully retry the request.
-
-## Customization
-
-To adapt this template for your own ZMK module:
-
-1. **Update the proto file**: Modify `../proto/your-name/template/template.proto` with
-   your message types
-2. **Regenerate types**: Run `npm run generate`
-3. **Update subsystem identifier**: Change `SUBSYSTEM_IDENTIFIER` in `App.tsx`
-   to match your firmware registration
-4. **Update RPC logic**: Modify the request/response handling in `App.tsx`
-5. **Update tests**: Modify tests to match your custom subsystem identifier and
-   functionality
+It checks connection, statistics, Refresh, confirmed Reset, persistence changes,
+JSON download and Disconnect. Only the runner's serial transport shim is used;
+statistics RPCs are handled by actual firmware.

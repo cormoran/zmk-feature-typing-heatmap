@@ -1,34 +1,39 @@
 include:
-  - artifact: module_template_board_feature_disabled
+  - artifact: feature_typing_heatmap_board_feature_disabled
     board: xiao_ble//zmk
     shield: tester_xiao
 
-  - artifact: module_template_board_with_rpc
+  - artifact: feature_typing_heatmap_board_with_rpc
     board: xiao_ble//zmk
     shield: tester_xiao
-    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_TEMPLATE_FEATURE=y -DCONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y
     snippet: studio-rpc-usb-uart
 
-  - artifact: module_template_board_without_rpc
+  - artifact: feature_typing_heatmap_board_without_rpc
     board: xiao_ble//zmk
     shield: tester_xiao
-    cmake-args: -DCONFIG_ZMK_TEMPLATE_FEATURE=y
+    cmake-args: -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP=y
+
+  - artifact: feature_typing_heatmap_board_ram
+    board: xiao_ble//zmk
+    shield: tester_xiao
+    cmake-args: -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP=y -DCONFIG_ZMK_BLE=n -DCONFIG_SETTINGS=n
 
   # DUT for the web UI end-to-end test (see web/e2e/ and README.md's "Web UI
   # end-to-end testing"): the same real studio-rpc-usb-uart image as
-  # module_template_board_with_rpc -- one machine, so it boots and enumerates
+  # feature_typing_heatmap_board_with_rpc -- one machine, so it boots and enumerates
   # USB fast -- but with Studio locking OFF. An emulator has no key to press
   # &studio_unlock with, and the web UI disables its controls while locked.
   - artifact: web_e2e
     board: xiao_ble//zmk
     shield: tester_xiao
-    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_STUDIO_LOCKING=n -DCONFIG_ZMK_TEMPLATE_FEATURE=y -DCONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_STUDIO_LOCKING=n -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y
     snippet: studio-rpc-usb-uart
 
   - artifact: custom_settings_board
     board: xiao_ble//zmk
     shield: tester_xiao
-    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_TEMPLATE_FEATURE=y -DCONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y -DCONFIG_ZMK_CUSTOM_SETTINGS=y -DCONFIG_ZMK_CUSTOM_SETTINGS_STUDIO_RPC=y
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y -DCONFIG_ZMK_CUSTOM_SETTINGS=y -DCONFIG_ZMK_CUSTOM_SETTINGS_STUDIO_RPC=y
     snippet: studio-rpc-usb-uart
 
   # Hardware-free Renode testing (see README.md) -- the `wired-split` mode of
@@ -39,15 +44,13 @@ include:
   # boards/shields/ here) of zmk-west-commands' test shields of the same name.
   # Emulation-only images (USB/split pinctrl), not flashable as-is.
   #
-  # The module's split-relay sample is NOT built here: relay-over-wired needs a
-  # newer zmk than the pin (fffa339 relays only over BLE, so a BLE-off wired
-  # half fails to link). That path is covered by the BabbleSim BLE test. To
-  # re-enable once the pin advances: add CONFIG_ZMK_SPLIT_RELAY_EVENT to both
-  # halves and restore the relay assertion in renode_test.py.
+  # The inherited sample relay is exercised by the BLE test. This wired pair
+  # verifies physical press forwarding and the heatmap on the central; the
+  # peripheral does not enable the statistics module.
   - artifact: usb_wired_central
     board: xiao_ble//zmk
     shield: renode_usb_wired_split
-    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_TEMPLATE_FEATURE=y -DCONFIG_ZMK_TEMPLATE_FEATURE_STUDIO_RPC=y
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y
     snippets:
       - studio-rpc-usb-uart
 
@@ -56,3 +59,10 @@ include:
   - artifact: usb_wired_peripheral
     board: xiao_ble//zmk
     shield: renode_wired_split
+
+  # Short test-only save policy for persistence/reboot checks.
+  - artifact: usb_wired_persistence
+    board: xiao_ble//zmk
+    shield: renode_usb_wired_split
+    cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP_STUDIO_RPC=y -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP_SAVE_INTERVAL_SECONDS=60 -DCONFIG_ZMK_FEATURE_TYPING_HEATMAP_MIN_PRESSES=2
+    snippet: studio-rpc-usb-uart

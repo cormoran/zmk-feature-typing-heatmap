@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import sys
+import subprocess
 import time
 import unittest
 from pathlib import Path
@@ -52,7 +53,7 @@ except ImportError:  # pragma: no cover - convenience fallback for local dev
         raise
 
 
-SUBSYSTEM_IDENTIFIER = "your_name__template"
+SUBSYSTEM_IDENTIFIER = "cormoran_typing_heatmap"
 # This template registers exactly one custom subsystem, so its index is
 # deterministically 0.
 KNOWN_SUBSYSTEM_INDEX = 0
@@ -62,15 +63,41 @@ KNOWN_SUBSYSTEM_INDEX = 0
 INVALID_SUBSYSTEM_INDEX = 99
 
 SAMPLE_VALUE = 42
-# See handle_sample_request() in src/studio/template_handler.c.
+# See handle_sample_request() in src/studio/feature_typing_heatmap_handler.c.
 EXPECTED_SAMPLE_RESPONSE = f"Hello from firmware! Received: {SAMPLE_VALUE}"
 
 # attach_dual_cdc_bridge's default bridge name -> monitor object prefix.
 BRIDGE_NAME = "bridge"
 
 
+def find_module_studio_protos():
+    """Use the active West dependency, including shared-profile worktrees."""
+    result = subprocess.run(
+        ["west", "list", "zmk-studio-messages", "-f", "{abspath}"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        directory = Path(result.stdout.strip()) / "proto" / "zmk"
+        if directory.is_dir():
+            return directory
+    return renode_harness.find_studio_proto_dir(REPO_ROOT)
+
+
 def _mon_is_true(mon, command: str) -> bool:
     return "True" in mon.execute(command, settle=0.3)
+
+
+def inject_heatmap_keypress(session, machine):
+    """Drive the fixture's active-low switch, ending with the key released."""
+    session.mon.execute(f'mach set "{machine}"')
+    session.mon.execute("sysbus.gpio0 OnGPIO 2 true")
+    time.sleep(0.5)
+    session.mon.execute("sysbus.gpio0 OnGPIO 2 false")
+    time.sleep(0.5)
+    session.mon.execute("sysbus.gpio0 OnGPIO 2 true")
+    time.sleep(0.5)
 
 
 class RenodeWiredSplitModuleTests(unittest.TestCase):
@@ -127,17 +154,23 @@ class RenodeWiredSplitModuleTests(unittest.TestCase):
 
         # Core zmk.studio.* messages (Request/Response envelope, core.proto,
         # custom.proto for the generic custom-subsystem envelope).
-        studio_proto_dir = renode_harness.find_studio_proto_dir(REPO_ROOT)
+        studio_proto_dir = find_module_studio_protos()
         cls.studio_pb2 = renode_harness.load_studio_pb2(studio_proto_dir)
 
-        # This module's own proto (package your_name.template) -- protoc
-        # normalizes the hyphenated "your-name" path to the "your_name" package.
+        # This module's own proto (package cormoran.feature_typing_heatmap) -- protoc
+        # imports the generated module messages from their namespace package.
         out_dir = renode_harness.compile_protos(
-            [REPO_ROOT / "proto" / "your-name" / "template" / "template.proto"],
+            [
+                REPO_ROOT
+                / "proto"
+                / "cormoran"
+                / "feature-typing-heatmap"
+                / "feature_typing_heatmap.proto"
+            ],
             include_dirs=[REPO_ROOT / "proto"],
         )
         sys.path.insert(0, str(out_dir))
-        import your_name.template.template_pb2 as template_pb2  # type: ignore
+        import cormoran.feature_typing_heatmap.feature_typing_heatmap_pb2 as template_pb2  # type: ignore
 
         cls.template_pb2 = template_pb2
 
@@ -240,7 +273,9 @@ class RenodeWiredSplitModuleTests(unittest.TestCase):
         USB CDC."""
         inner_req = self.template_pb2.Request()
         inner_req.sample.value = SAMPLE_VALUE
-        self._send_call(KNOWN_SUBSYSTEM_INDEX, inner_req.SerializeToString(), request_id=1)
+        self._send_call(
+            KNOWN_SUBSYSTEM_INDEX, inner_req.SerializeToString(), request_id=1
+        )
 
         resp = self._read_response()
         self.assertEqual(resp.WhichOneof("type"), "request_response")
@@ -257,12 +292,75 @@ class RenodeWiredSplitModuleTests(unittest.TestCase):
         self.assertEqual(inner_resp.WhichOneof("response_type"), "sample")
         self.assertEqual(inner_resp.sample.value, EXPECTED_SAMPLE_RESPONSE)
 
-    # The module's split-relay sample (central forwarding the value to the
-    # peripheral) is covered by the BabbleSim BLE test, not here: relay-over-wired
-    # needs a newer zmk than the pin. To add once it advances: build the
-    # peripheral with the module + CONFIG_ZMK_SPLIT_RELAY_EVENT and assert its
-    # "Peripheral received relayed sample value: 42 (v1)" log on
-    # self.peripheral_console.
+    def _heatmap_call(self, request):
+        self._send_call(
+            KNOWN_SUBSYSTEM_INDEX, request.SerializeToString(), request_id=31
+        )
+        response = self._read_response(timeout=20)
+        self.assertEqual(response.request_response.request_id, 31)
+        self.assertEqual(response.request_response.WhichOneof("subsystem"), "custom")
+        inner = self.template_pb2.Response()
+        inner.ParseFromString(response.request_response.custom.call.payload)
+        return inner
+
+    def test_heatmap_physical_presses_reset_and_ram_mode(self):
+        """Actual split position events, counts, and mutations through USB RPC."""
+        proto = self.template_pb2
+        request = proto.Request()
+        request.reset.SetInParent()
+        self.assertEqual(
+            self._heatmap_call(request).WhichOneof("response_type"), "mutation"
+        )
+
+        def stats(offset=0):
+            request = proto.Request()
+            request.get_stats.offset = offset
+            return self._heatmap_call(request)
+
+        initial = stats().stats
+        self.assertEqual(initial.position_count, 4)
+        self.assertEqual(list(initial.counts), [0, 0, 0, 0])
+        self.assertTrue(initial.persistence_supported)
+        self.assertEqual(initial.save_interval_seconds, 1800)
+        self.assertEqual(initial.min_presses, 100)
+
+        # Both halves use the same four-position transform. The central owns
+        # the only counters, including peripheral-originated physical events.
+        for machine in ("central", "peripheral"):
+            inject_heatmap_keypress(self.session, machine=machine)
+            time.sleep(0.5)
+        self.session.mon.execute('mach set "central"')
+        counts = stats().stats
+        self.assertEqual(list(counts.counts), [2, 0, 0, 0])
+        self.assertEqual(counts.unsaved_presses, 2)
+        self.assertEqual(stats(5).WhichOneof("response_type"), "error")
+
+        request = proto.Request()
+        request.set_persistence.enabled = False
+        response = self._heatmap_call(request)
+        self.assertEqual(response.WhichOneof("response_type"), "mutation")
+        self.assertFalse(response.mutation.persistence_enabled)
+        self.assertEqual(list(stats().stats.counts), [2, 0, 0, 0])
+
+        request = proto.Request()
+        request.reset.SetInParent()
+        self.assertEqual(
+            self._heatmap_call(request).WhichOneof("response_type"), "mutation"
+        )
+        cleared = stats().stats
+        self.assertEqual(list(cleared.counts), [0, 0, 0, 0])
+        self.assertFalse(cleared.persistence_enabled)
+        self.assertEqual(cleared.unsaved_presses, 0)
+
+        request = proto.Request()
+        request.set_persistence.enabled = True
+        response = self._heatmap_call(request)
+        self.assertEqual(response.WhichOneof("response_type"), "mutation")
+        self.assertTrue(response.mutation.persistence_enabled)
+        self.assertEqual(stats().stats.storage_error, 0)
+
+    # The inherited relay demo remains covered by the BLE suite. This wired
+    # fixture tests central statistics for real local and peripheral presses.
 
 
 if __name__ == "__main__":

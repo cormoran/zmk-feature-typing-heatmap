@@ -1,276 +1,258 @@
+import { StrictMode } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   createConnectedMockZMKApp,
   ZMKAppProvider,
 } from "@cormoran/zmk-studio-react-hook/testing";
-import { RPCTestSection, SUBSYSTEM_IDENTIFIER } from "../src/App";
-import { Response } from "../src/proto/your-name/template/template";
-import { LockState } from "@zmkfirmware/zmk-studio-ts-client/core";
+import { TypingHeatmapSection } from "../src/TypingHeatmapSection";
+import {
+  Request,
+  Response,
+  StatsResponse,
+} from "../src/proto/cormoran/feature-typing-heatmap/feature_typing_heatmap";
+import { readHeatmap } from "../src/heatmap";
 
-// Mock the ZMK client so we can control call_rpc responses directly: both
-// useStudioLockState's initial getLockState query and useCustomSubsystem's
-// callRPC go through this module.
 jest.mock("@zmkfirmware/zmk-studio-ts-client", () => ({
   create_rpc_connection: jest.fn(),
   call_rpc: jest.fn(),
-  MetaError: class MetaError extends Error {
-    condition: number;
-    constructor(condition: number) {
-      super(`meta error: ${condition}`);
-      this.condition = condition;
-      Object.setPrototypeOf(this, MetaError.prototype);
-    }
-  },
+  MetaError: class extends Error {},
 }));
-
-const UNLOCK_REQUIRED = 1; // zmk.meta.ErrorConditions.UNLOCK_REQUIRED
-
-describe("RPCTestSection Component", () => {
-  describe("With Subsystem", () => {
-    it("should render RPC controls when subsystem is found", () => {
-      const mockZMKApp = createConnectedMockZMKApp({
-        deviceName: "Test Device",
-        subsystems: [SUBSYSTEM_IDENTIFIER],
-      });
-
-      render(
-        <ZMKAppProvider value={mockZMKApp}>
-          <RPCTestSection />
-        </ZMKAppProvider>
-      );
-
-      expect(screen.getByText(/RPC Test/i)).toBeInTheDocument();
-      expect(screen.getByText(/Send a sample request/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/Value:/i)).toBeInTheDocument();
-      expect(screen.getByText(/Send Request/i)).toBeInTheDocument();
-    });
-
-    it("should show default input value", () => {
-      const mockZMKApp = createConnectedMockZMKApp({
-        subsystems: [SUBSYSTEM_IDENTIFIER],
-      });
-
-      render(
-        <ZMKAppProvider value={mockZMKApp}>
-          <RPCTestSection />
-        </ZMKAppProvider>
-      );
-
-      const input = screen.getByLabelText(/Value:/i) as HTMLInputElement;
-      expect(input.value).toBe("42");
-    });
+import { call_rpc } from "@zmkfirmware/zmk-studio-ts-client";
+const rpc = call_rpc as jest.Mock;
+const stats = (overrides: Partial<StatsResponse> = {}) =>
+  StatsResponse.create({
+    counts: [4, 8],
+    positionCount: 2,
+    persistenceEnabled: true,
+    persistenceSupported: true,
+    saveIntervalSeconds: 1800,
+    minPresses: 100,
+    unsavedPresses: 12,
+    generation: 1,
+    ...overrides,
   });
 
-  describe("Without Subsystem", () => {
-    it("should show warning when subsystem is not found", () => {
-      const mockZMKApp = createConnectedMockZMKApp({
-        deviceName: "Test Device",
-        subsystems: [],
-      });
-
-      render(
-        <ZMKAppProvider value={mockZMKApp}>
-          <RPCTestSection />
-        </ZMKAppProvider>
-      );
-
-      expect(
-        screen.getByText(/Subsystem "your_name__template" not found/i)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(
-          /Make sure your firmware includes the template module/i
-        )
-      ).toBeInTheDocument();
-      const link = screen.getByRole("link", { name: /module README/i });
-      expect(link).toHaveAttribute(
-        "href",
-        "https://github.com/cormoran/zmk-module-template#readme"
-      );
-    });
-  });
-
-  describe("Without ZMKAppContext", () => {
-    it("should not render when ZMKAppContext is not provided", () => {
-      const { container } = render(<RPCTestSection />);
-
-      expect(container.firstChild).toBeNull();
-    });
-  });
-
-  describe("Unlock flow", () => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const zmkClient = require("@zmkfirmware/zmk-studio-ts-client");
-
-    beforeEach(() => {
-      jest.clearAllMocks();
-    });
-
-    function mockCallRpc({
-      lockState,
-      customResult,
-    }: {
-      lockState: LockState;
-      customResult: "unlock-required" | "success";
-    }) {
-      zmkClient.call_rpc.mockImplementation(
-        (
-          _connection: unknown,
-          req: {
-            core?: { getLockState?: boolean };
-            custom?: { call?: unknown };
-          }
-        ) => {
-          if (req.core?.getLockState) {
-            return Promise.resolve({ core: { getLockState: lockState } });
-          }
-          if (req.custom?.call) {
-            if (customResult === "unlock-required") {
-              return Promise.reject(new zmkClient.MetaError(UNLOCK_REQUIRED));
-            }
-            const payload = Response.encode(
-              Response.create({ sample: { value: "unlocked response" } })
-            ).finish();
-            return Promise.resolve({ custom: { call: { payload } } });
-          }
-          return Promise.reject(new Error("unexpected call_rpc request"));
-        }
-      );
+function setup(
+  handler: (request: Request) => Response | Promise<Response> = () => ({
+    stats: stats(),
+  })
+) {
+  const requests: Request[] = [];
+  rpc.mockImplementation(
+    async (
+      _connection: unknown,
+      request: { core?: unknown; custom?: { call: { payload: Uint8Array } } }
+    ) => {
+      if (request.core) return { core: { getLockState: 1 } }; // Locked: module is unsecured.
+      if (!request.custom) throw new Error("Unexpected RPC");
+      const decoded = Request.decode(request.custom.call.payload);
+      requests.push(decoded);
+      const response = await handler(decoded);
+      return {
+        custom: {
+          call: {
+            payload: Response.encode(Response.create(response)).finish(),
+          },
+        },
+      };
     }
-
-    it("shows the unlock prompt when a secured RPC call is rejected with UNLOCK_REQUIRED", async () => {
-      mockCallRpc({
-        lockState: LockState.ZMK_STUDIO_CORE_LOCK_STATE_UNLOCKED,
-        customResult: "unlock-required",
-      });
-
-      const mockZMKApp = createConnectedMockZMKApp({
-        subsystems: [SUBSYSTEM_IDENTIFIER],
-      });
-
-      render(
-        <ZMKAppProvider value={mockZMKApp}>
-          <RPCTestSection />
-        </ZMKAppProvider>
-      );
-
-      const user = userEvent.setup();
-      await user.click(screen.getByText(/Send Request/i));
-
-      await waitFor(() => {
-        expect(screen.getByText(/ZMK Studio is locked/i)).toBeInTheDocument();
-      });
-      expect(screen.getByText("Retry")).toBeInTheDocument();
-    });
-
-    it("auto-retries and renders the response once a lockStateChanged notification reports unlocked", async () => {
-      // Initial getLockState reports unlocked (optimistic), so the Send
-      // button starts enabled; the send itself is what discovers the device
-      // requires unlocking (e.g. the firmware handler flipped to SECURED
-      // after the initial query).
-      mockCallRpc({
-        lockState: LockState.ZMK_STUDIO_CORE_LOCK_STATE_UNLOCKED,
-        customResult: "unlock-required",
-      });
-
-      // createConnectedMockZMKApp's onNotification is a plain jest mock (it
-      // does not dispatch the `notifications` array on its own -- that array
-      // only feeds useZMKApp's own notification reader, not this mock
-      // context). Capture the core callback useStudioLockState registers so
-      // the test can simulate a real-time lockStateChanged notification.
-      let coreCallback:
-        | ((notification: { lockStateChanged?: LockState }) => void)
-        | undefined;
-      const mockZMKApp = createConnectedMockZMKApp({
-        subsystems: [SUBSYSTEM_IDENTIFIER],
-      });
-      mockZMKApp.onNotification = jest.fn((subscription) => {
-        if (subscription.type === "core") {
-          coreCallback = subscription.callback;
-        }
-        return () => {};
-      });
-
-      render(
-        <ZMKAppProvider value={mockZMKApp}>
-          <RPCTestSection />
-        </ZMKAppProvider>
-      );
-
-      const user = userEvent.setup();
-      await waitFor(() => {
-        expect(screen.getByText(/Send Request/i)).not.toBeDisabled();
-      });
-      await user.click(screen.getByText(/Send Request/i));
-
-      await waitFor(() => {
-        expect(screen.getByText("Retry")).toBeInTheDocument();
-      });
-
-      // Once the retry (triggered by the notification below) fires, let it
-      // succeed.
-      mockCallRpc({
-        lockState: LockState.ZMK_STUDIO_CORE_LOCK_STATE_UNLOCKED,
-        customResult: "success",
-      });
-
-      expect(coreCallback).toBeDefined();
-      // The auto-retry effect only fires when `locked` actually *changes* to
-      // false. Simulate the realistic sequence: the device confirms it's
-      // locked (a real transition, since the hook's `locked` started false
-      // optimistically), then reports unlocked once the user presses
-      // &studio_unlock -- that second, real true->false transition is what
-      // triggers the retry.
-      await act(async () => {
-        coreCallback?.({
-          lockStateChanged: LockState.ZMK_STUDIO_CORE_LOCK_STATE_LOCKED,
-        });
-      });
-      await act(async () => {
-        coreCallback?.({
-          lockStateChanged: LockState.ZMK_STUDIO_CORE_LOCK_STATE_UNLOCKED,
-        });
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText(/unlocked response/i)).toBeInTheDocument();
-      });
-    });
-
-    it("retries manually via the Retry button and renders the response", async () => {
-      mockCallRpc({
-        lockState: LockState.ZMK_STUDIO_CORE_LOCK_STATE_UNLOCKED,
-        customResult: "unlock-required",
-      });
-
-      const mockZMKApp = createConnectedMockZMKApp({
-        subsystems: [SUBSYSTEM_IDENTIFIER],
-      });
-
-      render(
-        <ZMKAppProvider value={mockZMKApp}>
-          <RPCTestSection />
-        </ZMKAppProvider>
-      );
-
-      const user = userEvent.setup();
-      await user.click(screen.getByText(/Send Request/i));
-
-      await waitFor(() => {
-        expect(screen.getByText("Retry")).toBeInTheDocument();
-      });
-
-      mockCallRpc({
-        lockState: LockState.ZMK_STUDIO_CORE_LOCK_STATE_UNLOCKED,
-        customResult: "success",
-      });
-
-      await user.click(screen.getByText("Retry"));
-
-      await waitFor(() => {
-        expect(screen.getByText(/unlocked response/i)).toBeInTheDocument();
-      });
-    });
+  );
+  const app = createConnectedMockZMKApp({
+    subsystems: ["cormoran_typing_heatmap"],
   });
+  const findSubsystem = app.findSubsystem;
+  app.findSubsystem = (identifier) => {
+    const found = findSubsystem(identifier);
+    return found ? { ...found } : null;
+  };
+  const view = render(
+    <ZMKAppProvider value={app}>
+      <TypingHeatmapSection />
+    </ZMKAppProvider>
+  );
+  return { requests, app, ...view };
+}
+
+beforeEach(() => jest.clearAllMocks());
+
+test("loads once despite new subsystem objects and state renders; refresh is explicit", async () => {
+  const { requests, app, rerender } = setup();
+  await screen.findByText("12", { selector: "strong" });
+  expect(requests).toHaveLength(1);
+  rerender(
+    <ZMKAppProvider value={app}>
+      <TypingHeatmapSection />
+    </ZMKAppProvider>
+  );
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(requests).toHaveLength(1);
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  await waitFor(() => expect(requests).toHaveLength(2));
+  expect(screen.getByLabelText("Position 1: 8 presses")).toBeInTheDocument();
+});
+
+test("reset requires confirmation and reloads after mutation", async () => {
+  let reset = false;
+  const { requests } = setup((request) => {
+    if (request.reset) {
+      reset = true;
+      return { mutation: { generation: 2, persistenceEnabled: true } };
+    }
+    return { stats: stats({ counts: reset ? [0, 0] : [4, 8] }) };
+  });
+  await screen.findByTestId("total-presses");
+  await userEvent.click(
+    screen.getByRole("button", { name: "Reset statistics" })
+  );
+  expect(requests).toHaveLength(1);
+  await userEvent.click(screen.getByRole("button", { name: "Confirm reset" }));
+  await waitFor(() =>
+    expect(screen.getByTestId("total-presses")).toHaveTextContent("0")
+  );
+  expect(requests.map((r) => !!r.reset)).toEqual([false, true, false]);
+});
+
+test("mode toggle reloads memory policy and reports storage failures without losing visible counts", async () => {
+  let enabled = true;
+  setup((request) => {
+    if (request.setPersistence) {
+      enabled = request.setPersistence.enabled;
+      return { mutation: { persistenceEnabled: enabled, generation: 2 } };
+    }
+    if (request.reset) return { error: { message: "Storage write failed" } };
+    return { stats: stats({ persistenceEnabled: enabled }) };
+  });
+  const checkbox = await screen.findByRole("checkbox");
+  await userEvent.click(checkbox);
+  await screen.findByText(/Memory only:/);
+  expect(checkbox).not.toBeChecked();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Reset statistics" })
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Confirm reset" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Storage write failed"
+  );
+  expect(screen.getByTestId("total-presses")).toHaveTextContent("12");
+});
+
+test("storage unsupported disables persistence", async () => {
+  setup(() => ({
+    stats: stats({ persistenceSupported: false, persistenceEnabled: false }),
+  }));
+  expect(await screen.findByRole("checkbox")).toBeDisabled();
+  expect(
+    screen.getByText(/Persistent storage is unavailable/)
+  ).toBeInTheDocument();
+});
+
+test("overlapping actions are disabled and stale connection completion is ignored", async () => {
+  let finish!: (response: Response) => void;
+  const { app, rerender } = setup(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  await screen.findByRole("status");
+  expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
+  const next = createConnectedMockZMKApp({
+    subsystems: ["cormoran_typing_heatmap"],
+  });
+  // Change the actual connection rather than only replacing the context wrapper.
+  expect(next.state.connection).not.toBe(app.state.connection);
+  rpc.mockImplementation(async (_c: unknown, request: { core?: unknown }) =>
+    request.core
+      ? { core: { getLockState: 1 } }
+      : {
+          custom: {
+            call: {
+              payload: Response.encode({
+                stats: stats({ counts: [1, 1] }),
+              }).finish(),
+            },
+          },
+        }
+  );
+  rerender(
+    <ZMKAppProvider value={next}>
+      <TypingHeatmapSection />
+    </ZMKAppProvider>
+  );
+  await waitFor(() =>
+    expect(screen.getByTestId("total-presses")).toHaveTextContent("2")
+  );
+  await act(async () => finish({ stats: stats({ counts: [99, 99] }) }));
+  expect(screen.getByTestId("total-presses")).toHaveTextContent("2");
+});
+
+test("pagination restarts on generation mismatch and returns only coherent counts", async () => {
+  const pages = [
+    stats({ positionCount: 18, counts: Array(16).fill(1) }),
+    stats({ positionCount: 18, offset: 16, counts: [2, 2], generation: 2 }),
+    stats({ positionCount: 18, counts: Array(16).fill(3), generation: 3 }),
+    stats({ positionCount: 18, offset: 16, counts: [4, 4], generation: 3 }),
+  ];
+  const call = jest.fn(async () => ({ stats: pages.shift()! }));
+  const result = await readHeatmap(call);
+  expect(result.counts).toEqual([...Array(16).fill(3), 4, 4]);
+  expect(call.mock.calls).toHaveLength(4);
+});
+
+test("continuous typing retries are bounded and invalid pages fail clearly", async () => {
+  let calls = 0;
+  const call = jest.fn(async (request: Request) => ({
+    stats: stats({
+      positionCount: 18,
+      counts: request.getStats?.offset ? [1, 1] : Array(16).fill(1),
+      offset: request.getStats?.offset,
+      generation: ++calls,
+    }),
+  }));
+  await expect(readHeatmap(call)).rejects.toThrow("Pause typing briefly");
+  expect(call).toHaveBeenCalledTimes(6);
+  await expect(
+    readHeatmap(async () => ({ stats: stats({ counts: [] }) }))
+  ).rejects.toThrow("invalid statistics page");
+});
+
+test("successful mutation invalidates old snapshot if reload fails", async () => {
+  let changed = false;
+  setup((request) => {
+    if (request.reset) {
+      changed = true;
+      return { mutation: { generation: 2, persistenceEnabled: true } };
+    }
+    if (changed) throw new Error("Read timed out");
+    return { stats: stats() };
+  });
+  await screen.findByTestId("total-presses");
+  await userEvent.click(
+    screen.getByRole("button", { name: "Reset statistics" })
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Confirm reset" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Operation succeeded, but refreshing statistics failed"
+  );
+  expect(screen.queryByTestId("total-presses")).not.toBeInTheDocument();
+});
+
+test("StrictMode initial loader performs one fetch", async () => {
+  const { app, unmount } = setup();
+  unmount();
+  rpc.mockClear();
+  render(
+    <StrictMode>
+      <ZMKAppProvider value={app}>
+        <TypingHeatmapSection />
+      </ZMKAppProvider>
+    </StrictMode>
+  );
+  await screen.findByTestId("total-presses");
+  expect(rpc.mock.calls.filter(([, request]) => request.custom)).toHaveLength(
+    1
+  );
 });
